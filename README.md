@@ -44,3 +44,9 @@ menu:
 ```bash
 hexo cl & hexo g & hexo d
 ```
+
+## 5.访问你的博客监测页面
+
+例如我的博客主页url为：[https://www.drluo.top](https://www.drluo.top)
+
+相应的监测页面为：[https://www.drluo.top/monitoring](https://www.drluo.top/monitoring)
