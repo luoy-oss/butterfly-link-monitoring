@@ -10,19 +10,14 @@ block content
     #monitoring-container
       .loading-message 正在加载监控数据...
 
-      //- 添加隐藏的数据元素，用于传递配置信息给JavaScript
-    #monitoring-config(data-api-url=config.monitoring && config.monitoring.url data-limit=config.monitoring && config.monitoring.limit style="display:none;")
+    //- 仅传递 API URL 配置
+    #monitoring-config(data-api-url=config.monitoring && config.monitoring.url style="display:none;")
 
   link(rel='stylesheet', href=url_for('/css/monitoring.css'))
 
   script.
     window.MONITORING_CONFIG = {
-      apiUrl: '#{config.monitoring ? config.monitoring.api_url : ""}',
-      friend_link_url: '#{config.monitoring ? config.monitoring.friend_link_url : ""}',
-      days: #{config.monitoring ? config.monitoring.days || 30 : 30},
-      links: !{config.monitoring ? JSON.stringify(config.monitoring.links) || '[]' : '[]'},
-      limit: #{config.monitoring ? config.monitoring.limit || 10 : 10}
+      apiUrl: '#{config.monitoring ? config.monitoring.api_url : ""}'
     };
-
 
   script(src=url_for('/js/monitoring.js'))

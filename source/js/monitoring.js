@@ -1,402 +1,416 @@
 /**
  * 监控页面脚本
- * 用于获取友链状态并显示监控数据
+ * 适配新的 MongoDB 数据结构：{ title, avatar, screenshot, status, available }
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-  // 获取配置信息
   const monitoringConfig = window.MONITORING_CONFIG || {};
   const apiUrl = monitoringConfig.apiUrl || 'https://blog-link-monitoring.drluo.top';
-  const friend_link_url = monitoringConfig.friend_link_url || '';
-  const limit = monitoringConfig.limit || 10;
-  const days = monitoringConfig.days || 30;
-  const additionalLinks = monitoringConfig.links || [];
-  
+  const container = document.getElementById('monitoring-container');
+  const timezone = 'Asia/Shanghai';
+  const timeFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
+  // 初始化：获取并显示数据
+  fetchAndRenderData();
+
   /**
-   * 创建空的监控项元素
-   * @param {Object} link 友链数据
-   * @returns {HTMLElement} 监控项元素
+   * 获取并渲染监控数据
    */
-  function createEmptyMonitorItem(link) {
-    const itemEl = document.createElement('div');
-    itemEl.className = 'monitor-item';
-    
-    // 站点信息
-    const siteInfoEl = document.createElement('div');
-    siteInfoEl.className = 'site-info';
-    
-    // 头像
-    const avatarEl = document.createElement('div');
-    avatarEl.className = 'site-avatar';
-    if (link.avatar) {
-      const imgEl = document.createElement('img');
-      imgEl.src = link.avatar;
-      imgEl.alt = link.title;
-      avatarEl.appendChild(imgEl);
-    }
-    siteInfoEl.appendChild(avatarEl);
-    
-    // 站点元数据
-    const metaEl = document.createElement('div');
-    metaEl.className = 'site-meta';
-    
-    const titleEl = document.createElement('div');
-    titleEl.className = 'site-title';
-    titleEl.textContent = link.title;
-    metaEl.appendChild(titleEl);
-    
-    const urlEl = document.createElement('div');
-    urlEl.className = 'site-url';
-    urlEl.textContent = link.url;
-    metaEl.appendChild(urlEl);
-    
-    siteInfoEl.appendChild(metaEl);
-    itemEl.appendChild(siteInfoEl);
-    
-    // 状态信息（加载中）
-    const statusEl = document.createElement('div');
-    statusEl.className = 'site-status';
-    
-    // 状态信息
-    const statusInfoEl = document.createElement('div');
-    statusInfoEl.className = 'status-info loading';
-    statusInfoEl.innerHTML = '<span class="loading-message">正在获取监控数据...</span>';
-    statusEl.appendChild(statusInfoEl);
-    
-    // 创建固定数量的灰色状态格
-    const statusBarEl = document.createElement('div');
-    statusBarEl.className = 'status-bar';
-    
-    for (let i = 0; i < days; i++) {
-      const barItemEl = document.createElement('div');
-      barItemEl.className = 'bar-item no-data';
-      barItemEl.title = '暂无监控数据';
-      if (i > 0) {
-        barItemEl.classList.add('gap');
-      }
-      statusBarEl.appendChild(barItemEl);
-    }
-    
-    statusEl.appendChild(statusBarEl);
-    itemEl.appendChild(statusEl);
-    
-    return itemEl;
-  }
-  
-  // 获取友链数据并合并额外的监测链接
-  getFriendLinks().then(friendLinks => {
-    // 合并配置文件中的额外链接
-    const extraLinks = additionalLinks.map(link => ({
-      title: link.title,
-      url: link.url,
-      avatar: link.avatar,
-      description: link.description
-    }));
-    // 创建监控面板并立即显示所有链接
-    const allLinks = [...extraLinks, ...friendLinks];
-    const container = document.getElementById('monitoring-container');
+  async function fetchAndRenderData() {
     if (!container) return;
 
-    // 清空容器
-    container.innerHTML = '';
-    
-    // 为每个链接创建面板并异步加载状态
-    allLinks.forEach(link => {
-      const itemEl = createEmptyMonitorItem(link);
-      container.appendChild(itemEl);
-      
-      // 异步加载监控数据
-      getMonitoringData(link).then(updatedItemEl => {
-        if (updatedItemEl) {
-          container.replaceChild(updatedItemEl, itemEl);
-        }
-      }).catch(error => {
-        console.error(`获取 ${link.url} 的监控数据失败:`, error);
-        itemEl.querySelector('.status-bar').innerHTML = `<div class="error-message">获取监控数据失败: ${error.message}</div>`;
-      });
-    });
-  }).catch(error => {
-    console.error('获取友链数据失败:', error);
-    document.getElementById('monitoring-container').innerHTML = `<div class="error-message">获取友链数据失败: ${error.message}</div>`;
-  });
-  
-  /**
-   * 获取友链数据
-   * @returns {Promise<Array>} 友链数据数组
-   */
-  async function getFriendLinks() {
-    if (!friend_link_url) return [];
     try {
-      const response = await fetch(friend_link_url);
+      // 1. 请求所有监控数据
+      const response = await fetch(`${apiUrl}/api/data`);
       if (!response.ok) {
-        throw new Error(`GitHub API 请求失败: ${response.status}`);
+        throw new Error(`API请求失败: ${response.status}`);
       }
-      
-      const data = await response.json();
-      
-      // 解析友链数据
-      return data.map(issue => {
-        // 尝试从issue.body中提取JSON数据
-        try {
-          const bodyContent = issue.body || '';
-          const jsonMatch = bodyContent.match(/```json\n([\s\S]*?)\n```/);
-          
-          if (jsonMatch && jsonMatch[1]) {
-            const linkData = JSON.parse(jsonMatch[1]);
-            return {
-              title: linkData.title || issue.title,
-              url: linkData.url || issue.title,
-              avatar: linkData.avatar || '',
-              description: linkData.description || ''
-            };
-          }
-          
-          // 如果没有找到JSON数据，使用issue标题作为URL
-          return {
-            title: issue.title.replace(/https?:\/\//, '').replace(/\/$/, ''),
-            url: issue.title,
-            avatar: '',
-            description: ''
-          };
-        } catch (e) {
-          console.error('解析友链数据失败:', e);
-          return {
-            title: issue.title.replace(/https?:\/\//, '').replace(/\/$/, ''),
-            url: issue.title,
-            avatar: '',
-            description: ''
-          };
-        }
+
+      const result = await response.json();
+
+      // 2. 清空加载提示
+      container.innerHTML = '';
+
+      if (!result.success || !result.data || result.data.length === 0) {
+        container.innerHTML = '<div class="none-message">暂无监控数据</div>';
+        return;
+      }
+
+      // 3. 渲染每个站点
+      result.data.forEach(linkData => {
+        const itemEl = createMonitorItem(linkData);
+        container.appendChild(itemEl);
       });
+      
+      // 4. 初始化历史记录模态框
+      initHistoryModal();
+      
+      // 5. 获取并渲染当月每日状态条
+      fetchMonthlyStats();
+
     } catch (error) {
-      console.error('获取友链数据失败:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * 创建监控面板
-   * @param {Array} friendLinks 友链数据数组
-   */
-  function createMonitoringPanel(friendLinks) {
-    const container = document.getElementById('monitoring-container');
-    if (!container) return;
-    
-    // 清空容器
-    container.innerHTML = '';
-    
-    // 创建加载提示
-    const loadingEl = document.createElement('div');
-    loadingEl.className = 'loading-message';
-    loadingEl.textContent = '正在获取监控数据...';
-    container.appendChild(loadingEl);
-    
-    // 处理每个友链
-    const promises = friendLinks.map(link => getMonitoringData(link));
-    
-    Promise.all(promises).then(results => {
-      // 移除加载提示
-      container.removeChild(loadingEl);
-      
-      // 显示监控数据
-      results.forEach(result => {
-        if (result) {
-          container.appendChild(result);
-        }
-      });
-    }).catch(error => {
       console.error('获取监控数据失败:', error);
-      loadingEl.textContent = `获取监控数据失败: ${error.message}`;
-      loadingEl.className = 'error-message';
-    });
-  }
-  
-  /**
-   * 获取单个网站的监控数据
-   * @param {Object} link 友链数据
-   * @returns {Promise<HTMLElement>} 监控面板元素
-   */
-  async function getMonitoringData(link) {
-    if (!link || !link.url) return null;
-    
-    try {
-      // 构建API URL
-      const url = link.url.startsWith('http') ? link.url : `https://${link.url}`;
-      const monitorUrl = `${apiUrl}/api/data?url=${encodeURIComponent(url)}&limit=${limit}`;
-      
-      // 设置超时
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
-      
-      const response = await fetch(monitorUrl, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`监控API请求失败: ${response.status}`);
-      }
-      
-      const monitorData = await response.json();
-      
-      // 检查数据是否为空
-      if (monitorData.success && monitorData.count === 0) {
-        const emptyItem = createEmptyMonitorItem(link);
-        const statusInfoEl = emptyItem.querySelector('.status-info');
-        statusInfoEl.classList.remove('loading');
-        statusInfoEl.innerHTML = '<span class="none-message">暂无监控数据</span>';
-        return emptyItem;
-      }
-      
-      // 创建监控面板元素
-      return createMonitorItem(link, monitorData);
-    } catch (error) {
-      console.error(`获取 ${link.url} 的监控数据失败:`, error);
-      const errorItem = createEmptyMonitorItem(link);
-      const statusInfoEl = errorItem.querySelector('.status-info');
-      statusInfoEl.classList.remove('loading');
-      statusInfoEl.innerHTML = `<span class="error-message">${error.name === 'AbortError' ? '请求超时' : '获取监控数据失败'}</span>`;
-      return errorItem;
+      container.innerHTML = `<div class="error-message">加载失败: ${error.message}</div>`;
     }
   }
-  
+
   /**
-   * 创建监控项元素
-   * @param {Object} link 友链数据
-   * @param {Object} monitorData 监控数据
-   * @returns {HTMLElement} 监控项元素
+   * 创建监控卡片
+   * @param {Object} data - 后端返回的完整链接对象
    */
-  function createMonitorItem(link, monitorData) {
-    if (!monitorData || !monitorData.data || !monitorData.data.length) {
-      return null;
-    }
-    
+  function createMonitorItem(data) {
     const itemEl = document.createElement('div');
     itemEl.className = 'monitor-item';
+    itemEl.dataset.url = data.url; // 添加 data-url 属性
     
-    // 站点信息
+    // --- 顶部：站点信息 ---
     const siteInfoEl = document.createElement('div');
     siteInfoEl.className = 'site-info';
     
     // 头像
     const avatarEl = document.createElement('div');
     avatarEl.className = 'site-avatar';
-    if (link.avatar) {
-      const imgEl = document.createElement('img');
-      imgEl.src = link.avatar;
-      imgEl.alt = link.title;
-      avatarEl.appendChild(imgEl);
-    }
+    const imgEl = document.createElement('img');
+    // 使用数据中的 avatar，如果没有则使用默认图或占位
+    imgEl.src = data.avatar || 'https://via.placeholder.com/48'; 
+    imgEl.alt = data.title || 'Unknown Site';
+    imgEl.onerror = () => { imgEl.src = 'https://via.placeholder.com/48?text=Err'; }; // 头像加载失败回退
+    avatarEl.appendChild(imgEl);
     siteInfoEl.appendChild(avatarEl);
     
-    // 站点元数据
+    // 文本信息
     const metaEl = document.createElement('div');
     metaEl.className = 'site-meta';
     
     const titleEl = document.createElement('div');
     titleEl.className = 'site-title';
-    titleEl.textContent = link.title;
+    titleEl.textContent = data.title || data.url;
     metaEl.appendChild(titleEl);
     
-    const urlEl = document.createElement('div');
+    const urlEl = document.createElement('a');
     urlEl.className = 'site-url';
-    urlEl.textContent = link.url;
+    urlEl.href = data.url;
+    urlEl.target = '_blank';
+    urlEl.rel = 'noopener noreferrer';
+    urlEl.textContent = data.url;
     metaEl.appendChild(urlEl);
     
     siteInfoEl.appendChild(metaEl);
+    
+    // 状态徽章 (放在右上角或跟随标题)
+    const statusBadge = document.createElement('div');
+    statusBadge.className = `status-badge ${data.available ? 'available' : 'unavailable'}`;
+    statusBadge.textContent = data.available ? '正常' : '异常';
+    siteInfoEl.appendChild(statusBadge);
+
+    // 历史按钮
+    const historyBtn = document.createElement('button');
+    historyBtn.className = 'history-btn';
+    historyBtn.title = '查看历史记录';
+    historyBtn.innerHTML = '<svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64z m0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" /><path d="M686.7 638.6L544.1 535.5V288c0-4.4-3.6-8-8-8H456c-4.4 0-8 3.6-8 8v320c0 3.3 1.9 6.4 5 7.8 0.9 0.4 1.9 0.6 2.8 0.6 2.2 0 4.4-0.9 6-2.4l196.5-142c3.5-2.5 4.4-7.4 1.8-10.9-2.5-3.6-7.4-4.5-10.9-1.9z" /></svg>';
+    historyBtn.onclick = (e) => {
+      e.stopPropagation();
+      openHistoryModal(data);
+    };
+    siteInfoEl.appendChild(historyBtn);
+
     itemEl.appendChild(siteInfoEl);
-    
-    // 状态信息
-    const statusEl = document.createElement('div');
-    statusEl.className = 'site-status';
-    
-    // 最新状态
-    const latestData = monitorData.data[0];
-    const isAvailable = latestData.available;
-    
-    const statusInfoEl = document.createElement('div');
-    statusInfoEl.className = `status-info ${isAvailable ? 'available' : 'unavailable'}`;
-    statusInfoEl.innerHTML = `
-      <span class="status-badge">${isAvailable ? '正常' : '异常'}</span>
-      <span class="response-time">响应时间: ${formatResponseTime(latestData.responseTime)}</span>
-      <span class="checked-time">检测时间: ${formatTime(new Date(latestData.timestamp || latestData.checkedAt))}</span>
-    `;
-    statusEl.appendChild(statusInfoEl);
-    
-    // 状态条
-    const statusBarEl = document.createElement('div');
-    statusBarEl.className = 'status-bar';
-    
-    // 获取最近days天的数据
-    const now = new Date();
-    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    
-    // 创建状态条项
-    if (monitorData.data.length === 0) {
-      // 无数据时显示灰色状态条
-      const barItemEl = document.createElement('div');
-      barItemEl.className = 'bar-item no-data';
-      barItemEl.title = '暂无监控数据';
-      statusBarEl.appendChild(barItemEl);
-    } else {
-      // 按时间倒序排序
-      const sortedData = monitorData.data
-        .filter(item => new Date(item.checkedAt) >= startDate)
-        .sort((a, b) => new Date(b.checkedAt) - new Date(a.checkedAt));
-      
-      // 创建分割的状态条
-      sortedData.forEach((item, index) => {
-        const barItemEl = document.createElement('div');
-        barItemEl.className = `bar-item ${item.available ? 'available' : 'unavailable'}`;
-        barItemEl.title = `${formatTime(new Date(item.checkedAt))}: ${item.available ? '正常' : '异常'} (${formatResponseTime(item.responseTime)})`;
-        
-        // 添加分隔线
-        if (index > 0) {
-          const prevDate = new Date(sortedData[index - 1].checkedAt);
-          const currDate = new Date(item.checkedAt);
-          const hoursDiff = (prevDate - currDate) / (1000 * 60 * 60);
-          
-          if (hoursDiff > 1) {
-            barItemEl.classList.add('gap');
-          }
-        }
-        
-        statusBarEl.appendChild(barItemEl);
-      });
+
+    // --- 中部：截图 (新增) ---
+    if (data.screenshot) {
+      const screenshotEl = document.createElement('div');
+      screenshotEl.className = 'site-screenshot';
+      const screenImg = document.createElement('img');
+      screenImg.src = data.screenshot;
+      screenImg.loading = 'lazy';
+      screenImg.alt = `Screenshot of ${data.title}`;
+      screenshotEl.appendChild(screenImg);
+      itemEl.appendChild(screenshotEl);
     }
+
+    // --- 每日状态条 ---
+    const dailyStatusEl = document.createElement('div');
+    dailyStatusEl.className = 'daily-status-container';
+    dailyStatusEl.innerHTML = '<div class="daily-status-loading"></div>';
+    itemEl.appendChild(dailyStatusEl);
+
+    // --- 底部：详细状态 ---
+    const statusDetailEl = document.createElement('div');
+    statusDetailEl.className = 'status-detail';
     
-    statusEl.appendChild(statusBarEl);
-    itemEl.appendChild(statusEl);
-    
+    const metricsHtml = `
+      <div class="metric-item">
+        <span class="label">状态码:</span>
+        <span class="value">${data.status || '-'}</span>
+      </div>
+      <div class="metric-item">
+        <span class="label">响应时间:</span>
+        <span class="value">${formatResponseTime(data.responseTime)}</span>
+      </div>
+      <div class="metric-item">
+        <span class="label">检测时间:</span>
+        <span class="value">${formatTime(new Date(data.checkedAt))}</span>
+      </div>
+    `;
+    statusDetailEl.innerHTML = metricsHtml;
+    itemEl.appendChild(statusDetailEl);
+
     return itemEl;
   }
-  
-  /**
-   * 格式化时间
-   * @param {Date} date 日期对象
-   * @returns {string} 格式化后的时间字符串
-   */
-  function formatTime(date) {
-    return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
+
+  // --- 历史记录模态框相关 ---
+  let historyModal, historyModalContent, loadMoreBtn;
+  let currentHistoryUrl = '';
+  let currentHistoryPage = 1;
+  let isLoadingHistory = false;
+
+  function initHistoryModal() {
+    // 检查是否已存在
+    if (document.getElementById('history-modal')) return;
+
+    // 创建模态框 DOM
+    const modalHtml = `
+      <div id="history-modal" class="history-modal">
+        <div class="history-modal-content">
+          <div class="history-modal-header">
+            <div class="history-modal-title">历史记录</div>
+            <button class="history-modal-close">&times;</button>
+          </div>
+          <div class="history-modal-body">
+            <ul class="history-list"></ul>
+            <div class="load-more-container" style="display:none">
+              <button class="load-more-btn">加载更多</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    historyModal = document.getElementById('history-modal');
+    historyModalContent = historyModal.querySelector('.history-list');
+    loadMoreBtn = historyModal.querySelector('.load-more-btn');
+
+    // 绑定事件
+    historyModal.querySelector('.history-modal-close').onclick = closeHistoryModal;
+    historyModal.onclick = (e) => {
+      if (e.target === historyModal) closeHistoryModal();
+    };
+    loadMoreBtn.onclick = loadMoreHistory;
   }
-  
+
+  function openHistoryModal(data) {
+    if (!historyModal) initHistoryModal();
+    
+    currentHistoryUrl = data.url;
+    currentHistoryPage = 1;
+    historyModal.querySelector('.history-modal-title').textContent = `${data.title} - 历史记录`;
+    historyModalContent.innerHTML = '';
+    historyModal.querySelector('.load-more-container').style.display = 'none';
+    
+    historyModal.classList.add('active');
+    document.body.style.overflow = 'hidden'; // 禁止背景滚动
+    
+    loadHistoryData();
+  }
+
+  function closeHistoryModal() {
+    if (historyModal) {
+      historyModal.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  }
+
+  async function loadHistoryData() {
+    if (isLoadingHistory) return;
+    isLoadingHistory = true;
+    
+    if (currentHistoryPage === 1) {
+      historyModalContent.innerHTML = '<div class="loading-message">加载中...</div>';
+    } else {
+      loadMoreBtn.textContent = '加载中...';
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/history?url=${encodeURIComponent(currentHistoryUrl)}&page=${currentHistoryPage}&limit=20`);
+      const result = await response.json();
+
+      if (currentHistoryPage === 1) {
+        historyModalContent.innerHTML = '';
+      }
+
+      if (result.success && result.data.length > 0) {
+        result.data.forEach(log => {
+          const item = document.createElement('li');
+          item.className = `history-item ${log.available ? 'success' : 'fail'}`;
+          item.innerHTML = `
+            <div class="history-time">${formatTime(new Date(log.checkedAt))}</div>
+            <div class="history-status">${log.available ? '正常' : '异常'}</div>
+            <div class="history-meta">
+              <span>${log.status || '-'}</span> | 
+              <span>${formatResponseTime(log.responseTime)}</span>
+            </div>
+          `;
+          historyModalContent.appendChild(item);
+        });
+
+        // 处理分页
+        const hasMore = result.pagination && result.pagination.hasMore;
+        const loadMoreContainer = historyModal.querySelector('.load-more-container');
+        loadMoreContainer.style.display = hasMore ? 'block' : 'none';
+        if (hasMore) {
+          loadMoreBtn.textContent = '加载更多';
+        }
+      } else if (currentHistoryPage === 1) {
+        historyModalContent.innerHTML = '<div class="none-message">暂无历史记录</div>';
+      }
+    } catch (error) {
+      console.error('加载历史记录失败:', error);
+      if (currentHistoryPage === 1) {
+        historyModalContent.innerHTML = `<div class="error-message">加载失败: ${error.message}</div>`;
+      } else {
+        loadMoreBtn.textContent = '加载失败，点击重试';
+      }
+    } finally {
+      isLoadingHistory = false;
+    }
+  }
+
+  function loadMoreHistory() {
+    currentHistoryPage++;
+    loadHistoryData();
+  }
+
   /**
-   * 数字补零
-   * @param {number} num 数字
-   * @returns {string} 补零后的字符串
+   * 获取并渲染月度每日状态
    */
+  async function fetchMonthlyStats() {
+    try {
+      // 默认获取当前月
+      const response = await fetch(`${apiUrl}/api/monthly`);
+      const result = await response.json();
+
+      if (!result.success || !result.data) return;
+
+      // 解析后端返回的月份 (例如 "2026-02")，如果未返回则回退到当前时间
+      let currentYear, currentMonth;
+      if (result.month) {
+        const parts = result.month.split('-');
+        currentYear = parseInt(parts[0], 10);
+        currentMonth = parseInt(parts[1], 10);
+      } else {
+        const parts = getShanghaiYearMonth();
+        currentYear = parts.year;
+        currentMonth = parts.month;
+      }
+
+      // 计算该月份的总天数
+      // new Date(year, month, 0) 获取的是该月最后一天
+      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+      // 遍历页面上所有的卡片
+      const items = document.querySelectorAll('.monitor-item');
+      items.forEach(item => {
+        const url = item.dataset.url;
+        const statusContainer = item.querySelector('.daily-status-container');
+        if (!statusContainer) return;
+
+        // 获取该 URL 的历史数据 (数组)
+        const historyData = result.data[url] || [];
+        // 转换为 Map 方便按日期查找: "2023-10-01" -> { uptime: 1, count: 20 }
+        const historyMap = {};
+        historyData.forEach(d => historyMap[d.date] = d);
+
+        statusContainer.innerHTML = ''; // 清空加载动画
+
+        // 生成每一天的条纹
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = `${currentYear}-${padZero(currentMonth)}-${padZero(day)}`;
+          const dayData = historyMap[dateStr];
+          
+          const strip = document.createElement('div');
+          strip.className = 'daily-status-item';
+          
+          // 判断颜色状态
+          if (dayData) {
+            if (dayData.uptime >= 1.0) {
+              strip.classList.add('status-success'); // 全绿
+            } else if (dayData.uptime > 0) {
+              strip.classList.add('status-partial'); // 部分失败 (橙色/黄色)
+            } else {
+              strip.classList.add('status-fail');    // 全红
+            }
+            
+            // Tooltip 内容
+            const uptimePercent = Math.round(dayData.uptime * 100);
+            strip.innerHTML = `
+              <div class="daily-status-tooltip">
+                ${dateStr}<br>
+                可用性: ${uptimePercent}%<br>
+                检测次数: ${dayData.count}
+              </div>
+            `;
+          } else {
+            strip.classList.add('status-none'); // 无数据 (灰色)
+            strip.innerHTML = `<div class="daily-status-tooltip">${dateStr}<br>无数据</div>`;
+          }
+          
+          statusContainer.appendChild(strip);
+        }
+      });
+
+    } catch (error) {
+      console.error('获取月度状态失败:', error);
+    }
+  }
+
+  // --- 工具函数 ---
+
+  function formatTime(date) {
+    if (isNaN(date.getTime())) return '-';
+    return timeFormatter.format(date).replace(', ', ' ');
+  }
+
   function padZero(num) {
     return num < 10 ? `0${num}` : num;
   }
-  
-  /**
-   * 格式化响应时间
-   * @param {number} ms - 毫秒数
-   * @returns {string} 格式化后的响应时间
-   */
+
+  function getShanghaiYearMonth() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit'
+    }).formatToParts(new Date());
+    const map = {};
+    parts.forEach(part => {
+      if (part.type !== 'literal') {
+        map[part.type] = part.value;
+      }
+    });
+    return {
+      year: parseInt(map.year, 10),
+      month: parseInt(map.month, 10)
+    };
+  }
+
   function formatResponseTime(ms) {
+    if (!ms && ms !== 0) return '-';
     if (ms < 1000) {
       return `${ms}ms`;
     } else {
       return `${(ms / 1000).toFixed(2)}s`;
     }
   }
+
+  // --- 历史记录模态框 UI 逻辑补充 ---
+  // 确保模态框关闭按钮和点击背景关闭生效
+  // 已经在 initHistoryModal 中绑定
 });
