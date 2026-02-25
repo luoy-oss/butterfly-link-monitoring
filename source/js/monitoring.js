@@ -56,8 +56,8 @@ document.addEventListener('DOMContentLoaded', function() {
       // 4. 初始化历史记录模态框
       initHistoryModal();
       
-      // 5. 获取并渲染当月每日状态条
-      fetchCurrentMonthStats();
+      // 5. 获取并渲染最近30天状态条
+      fetchRecentStats();
 
     } catch (error) {
       console.error('获取监控数据失败:', error);
@@ -327,40 +327,55 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /**
-   * 获取并渲染当前月每日状态 (使用 /api/current-month 接口)
+   * 获取并渲染最近30天状态 (使用 /api/recent-stats 接口)
    */
-  async function fetchCurrentMonthStats() {
+  async function fetchRecentStats() {
     // 遍历页面上所有的卡片，分别请求数据
     const items = document.querySelectorAll('.monitor-item');
     
-    // 获取当前年和月，用于计算当月天数
-    const { year: currentYear, month: currentMonth } = getShanghaiYearMonth();
-    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+    // 生成最近30天的日期数组 (包含今天)
+    const recentDates = [];
+    const today = new Date();
+    // 使用 Asia/Shanghai 时区处理日期，避免时区偏差
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
 
-    // 并发请求所有 URL 的数据 (注意控制并发量，虽然浏览器会自动处理)
-    // 这里为了简单直接遍历
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const parts = formatter.formatToParts(d);
+      const map = {};
+      parts.forEach(p => { if(p.type !== 'literal') map[p.type] = p.value });
+      recentDates.push(`${map.year}-${map.month}-${map.day}`);
+    }
+
+    // 并发请求所有 URL 的数据
     for (const item of items) {
       const url = item.dataset.url;
       const statusContainer = item.querySelector('.daily-status-container');
       if (!statusContainer) continue;
 
       try {
-        const response = await fetch(`${apiUrl}/api/current-month?url=${encodeURIComponent(url)}`);
+        const response = await fetch(`${apiUrl}/api/recent-stats?url=${encodeURIComponent(url)}`);
         const result = await response.json();
 
         if (result.success) {
-           renderDailyStatusBar(statusContainer, result.data, currentYear, currentMonth, daysInMonth);
+           renderDailyStatusBar(statusContainer, result.data, recentDates);
         } else {
-           renderEmptyStatusBar(statusContainer, currentYear, currentMonth, daysInMonth);
+           renderEmptyStatusBar(statusContainer, recentDates);
         }
       } catch (error) {
-        console.error(`获取当月数据失败 (${url}):`, error);
-        renderEmptyStatusBar(statusContainer, currentYear, currentMonth, daysInMonth);
+        console.error(`获取最近30天数据失败 (${url}):`, error);
+        renderEmptyStatusBar(statusContainer, recentDates);
       }
     }
   }
 
-  function renderDailyStatusBar(container, data, year, month, daysInMonth) {
+  function renderDailyStatusBar(container, data, dateList) {
     container.innerHTML = ''; // 清空加载动画
     
     // 准备数据 Map
@@ -372,8 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 生成每一天的条纹
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${year}-${padZero(month)}-${padZero(day)}`;
+    dateList.forEach(dateStr => {
       const dayStat = statsMap[dateStr];
       
       const strip = document.createElement('div');
@@ -413,21 +427,20 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       
       container.appendChild(strip);
-    }
+    });
   }
 
-  function renderEmptyStatusBar(container, year, month, daysInMonth) {
+  function renderEmptyStatusBar(container, dateList) {
     container.innerHTML = '';
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${year}-${padZero(month)}-${padZero(day)}`;
+    dateList.forEach(dateStr => {
       const strip = document.createElement('div');
       strip.className = 'daily-status-item status-none';
       strip.innerHTML = `<div class="daily-status-tooltip">${dateStr}<br>无数据</div>`;
       container.appendChild(strip);
-    }
+    });
   }
 
-  // --- 废弃旧的 fetchMonthlyStats 函数 ---
+  // --- 废弃旧的 fetchCurrentMonthStats 函数 ---
 
   // --- 工具函数 ---
 
