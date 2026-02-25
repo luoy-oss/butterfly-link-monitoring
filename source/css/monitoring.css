@@ -1,17 +1,27 @@
 /* 监控页面样式重构 */
 
-/* --------------------------------------
- * 覆盖主题默认布局限制 (关键修改)
- * -------------------------------------- */
+#monitoring-page .monitoring-header {
+  display: none;
+  text-align: center;
+  margin-bottom: 30px;
+  padding-top: 20px;
+}
 
-/* 1. 解除主容器宽度限制 */
+#monitoring-page .monitoring-description {
+  color: var(--font-color);
+  opacity: 0.7;
+  font-size: 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* 解除主容器宽度限制，实现全宽布局 */
 #content-inner.layout.hide-aside {
   max-width: 100%;
   padding: 0;
 }
 
-/* 2. 移除默认的内容卡片样式（背景、阴影、内边距）
-   因为我们使用的是 Grid 卡片布局，不需要外层再包一个大卡片 */
+/* 移除默认的内容卡片样式（背景、阴影等），让卡片直接展示在背景上 */
 #content-inner.layout > #monitoring-page {
   background: transparent;
   box-shadow: none;
@@ -20,17 +30,16 @@
   border-radius: 0;
 }
 
+/* Footer 背景存在 */
+#footer {
+  background: none !important;
+}
+
 /* --------------------------------------
- * 监控页面内部样式
+ * 监控卡片 Grid 布局
  * -------------------------------------- */
 
 /* 页面标题区域美化 */
-#monitoring-page .monitoring-header {
-  text-align: center;
-  margin-bottom: 30px;
-  padding-top: 20px;
-}
-
 #monitoring-page .page-title {
   font-size: 2rem;
   margin-bottom: 10px;
@@ -42,23 +51,15 @@
   display: inline-block;
 }
 
-#monitoring-page .monitoring-description {
-  color: var(--font-color);
-  opacity: 0.7;
-  font-size: 1rem;
-  max-width: 600px;
-  margin: 0 auto;
-}
-
 #monitoring-container {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   width: 100%;
-  max-width: 1800px; /* 扩大最大宽度限制 */
+  max-width: 1800px;
   margin: 0 auto;
   padding: 10px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* 稍微调宽单个卡片最小宽度 */
-  gap: 10px; /* 增加间距 */
+  gap: 16px; /* 增加间距 */
 }
 
 @media (min-width: 600px) {
@@ -73,9 +74,15 @@
   }
 }
 
-@media (min-width: 1800px) {
+@media (min-width: 1300px) {
   #monitoring-container {
      grid-template-columns: repeat(4, 1fr); /* 大屏显示4列 */
+  }
+}
+
+@media (min-width: 1800px) {
+  #monitoring-container {
+     grid-template-columns: repeat(5, 1fr); /* 超大屏显示5列 */
   }
 }
 
