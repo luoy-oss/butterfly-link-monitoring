@@ -239,6 +239,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isLoadingHistory) return;
     isLoadingHistory = true;
     
+
     if (currentHistoryPage === 1) {
       historyModalContent.innerHTML = '<div class="loading-message">加载中...</div>';
     } else {
@@ -246,69 +247,126 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     try {
-      const response = await fetch(`${apiUrl}/api/history?url=${encodeURIComponent(currentHistoryUrl)}&page=${currentHistoryPage}&limit=20`);
+      // 1. 获取最近30天数据 (使用 /api/recent-stats 接口)
+      const response = await fetch(`${apiUrl}/api/recent-stats?url=${encodeURIComponent(currentHistoryUrl)}`);
       const result = await response.json();
-      const logs = Array.isArray(result.data) ? result.data : [];
-      const monthlySummary = Array.isArray(result.monthlySummary) ? result.monthlySummary : [];
-
+      
       if (currentHistoryPage === 1) {
         historyModalContent.innerHTML = '';
       }
 
-      if (result.success && currentHistoryPage === 1 && monthlySummary.length > 0) {
-        const summaryTitle = document.createElement('li');
-        summaryTitle.className = 'history-section-title';
-        summaryTitle.textContent = '月度汇总';
-        historyModalContent.appendChild(summaryTitle);
-
-        monthlySummary.forEach(summary => {
-          const item = document.createElement('li');
-          item.className = 'history-item history-monthly';
-          item.innerHTML = `
-            <div class="history-time">${summary.month || '-'}</div>
-            <div class="history-status">月度汇总</div>
-            <div class="history-meta">
-              <span>可用率 ${formatPercentage(summary.uptimePercentage)}</span> | 
-              <span>平均响应 ${formatResponseTime(summary.avgResponseTime)}</span> | 
-              <span>检测 ${summary.totalChecks || 0}</span>
-            </div>
-          `;
-          historyModalContent.appendChild(item);
+      if (result.success && result.data && Array.isArray(result.data.stats)) {
+        const stats = result.data.stats;
+        
+        // 2. 按月份聚合数据
+        const monthlyStats = {};
+        
+        stats.forEach(dayStat => {
+          const month = dayStat.date.substring(0, 7); // YYYY-MM
+          
+          if (!monthlyStats[month]) {
+            monthlyStats[month] = {
+              month: month,
+              totalChecks: 0,
+              successfulChecks: 0,
+              failedChecks: 0,
+              totalResponseTime: 0
+            };
+          }
+          
+          monthlyStats[month].totalChecks += dayStat.totalChecks;
+          monthlyStats[month].successfulChecks += dayStat.successfulChecks;
+          monthlyStats[month].failedChecks += dayStat.failedChecks;
+          monthlyStats[month].totalResponseTime += dayStat.totalResponseTime;
         });
-      }
+        
+        // 转换为数组并按月份倒序排序
+        const monthlySummary = Object.values(monthlyStats).sort((a, b) => b.month.localeCompare(a.month));
+        
+        // 3. 渲染月度统计
+        if (monthlySummary.length > 0) {
+          const summaryTitle = document.createElement('li');
+          summaryTitle.className = 'history-section-title';
+          summaryTitle.textContent = '月度存活率统计 (最近30天)';
+          historyModalContent.appendChild(summaryTitle);
 
-      if (result.success && logs.length > 0) {
-        if (currentHistoryPage === 1 && monthlySummary.length > 0) {
+          monthlySummary.forEach(summary => {
+            // 计算可用率
+            const uptime = summary.totalChecks > 0 
+              ? (summary.successfulChecks / summary.totalChecks) * 100 
+              : 0;
+            
+            const item = document.createElement('li');
+            item.className = 'history-item history-monthly';
+            
+            // 根据可用率设置颜色
+            let statusClass = 'status-unknown';
+            if (uptime >= 100) statusClass = 'success';
+            else if (uptime >= 95) statusClass = 'warning';
+            else statusClass = 'fail';
+
+            item.classList.add(statusClass);
+
+            item.innerHTML = `
+              <div class="history-time" style="margin-right: 15px;">${summary.month}</div>
+              <div class="history-status" style="flex:2; margin-right: 15px;">
+                 <div class="progress-bar-bg" style="width:100%; height:8px; background:#eee; border-radius:4px; overflow:hidden;">
+                    <div class="progress-bar-fill" style="width:${uptime}%; height:100%; background:${uptime >= 100 ? '#10b981' : (uptime >= 90 ? '#f59e0b' : '#ef4444')}"></div>
+                 </div>
+              </div>
+              <div class="history-meta" style="flex:1; text-align:right;">
+                <span style="font-weight:bold; color:${uptime >= 100 ? '#10b981' : (uptime >= 90 ? '#f59e0b' : '#ef4444')}">${formatPercentage(uptime)}</span>
+              </div>
+            `;
+            historyModalContent.appendChild(item);
+          });
+        } else {
+           historyModalContent.innerHTML = '<div class="none-message">暂无月度统计数据</div>';
+        }
+        
+        // 4. 渲染每日详细数据 (作为补充，因为最近30天数据量不大，可以展示)
+        if (stats.length > 0) {
           const detailTitle = document.createElement('li');
           detailTitle.className = 'history-section-title';
-          detailTitle.textContent = '当月明细';
+          detailTitle.textContent = '每日明细';
+          detailTitle.style.marginTop = '20px';
           historyModalContent.appendChild(detailTitle);
+          
+          // 按日期倒序排列
+          const sortedStats = [...stats].sort((a, b) => b.date.localeCompare(a.date));
+          
+          sortedStats.forEach(dayStat => {
+             const uptime = dayStat.totalChecks > 0 
+              ? (dayStat.successfulChecks / dayStat.totalChecks) * 100 
+              : 0;
+             const avgTime = dayStat.totalChecks > 0 
+              ? Math.round(dayStat.totalResponseTime / dayStat.totalChecks) 
+              : 0;
+              
+             const item = document.createElement('li');
+             // 根据可用率设置简单的状态类
+             item.className = `history-item ${uptime >= 100 ? 'success' : (uptime > 0 ? 'warning' : 'fail')}`;
+             
+             item.innerHTML = `
+               <div class="history-time">${dayStat.date}</div>
+               <div class="history-status">${uptime >= 100 ? '正常' : (uptime > 0 ? '部分异常' : '异常')}</div>
+               <div class="history-meta">
+                 <span>${formatPercentage(uptime)}</span> | 
+                 <span>${avgTime}ms</span>
+               </div>
+             `;
+             historyModalContent.appendChild(item);
+          });
         }
 
-        logs.forEach(log => {
-          const item = document.createElement('li');
-          item.className = `history-item ${log.available ? 'success' : 'fail'}`;
-          item.innerHTML = `
-            <div class="history-time">${formatTime(new Date(log.checkedAt))}</div>
-            <div class="history-status">${log.available ? '正常' : '异常'}</div>
-            <div class="history-meta">
-              <span>${log.status || '-'}</span> | 
-              <span>${formatResponseTime(log.responseTime)}</span>
-            </div>
-          `;
-          historyModalContent.appendChild(item);
-        });
-
-        // 处理分页
-        const hasMore = result.pagination && result.pagination.hasMore;
-        const loadMoreContainer = historyModal.querySelector('.load-more-container');
-        loadMoreContainer.style.display = hasMore ? 'block' : 'none';
-        if (hasMore) {
-          loadMoreBtn.textContent = '加载更多';
-        }
-      } else if (currentHistoryPage === 1 && monthlySummary.length === 0) {
+      } else {
         historyModalContent.innerHTML = '<div class="none-message">暂无历史记录</div>';
       }
+
+      // 隐藏加载更多按钮 (因为是一次性获取所有 recent-stats)
+      const loadMoreContainer = historyModal.querySelector('.load-more-container');
+      if (loadMoreContainer) loadMoreContainer.style.display = 'none';
+
     } catch (error) {
       console.error('加载历史记录失败:', error);
       if (currentHistoryPage === 1) {
@@ -327,12 +385,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /**
-   * 获取并渲染最近30天状态 (使用 /api/recent-stats 接口)
+   * 获取并渲染最近30天状态 (使用 /api/recent-stats 接口 - 统一获取)
    */
   async function fetchRecentStats() {
-    // 遍历页面上所有的卡片，分别请求数据
     const items = document.querySelectorAll('.monitor-item');
-    
+    if (items.length === 0) return;
+
     // 生成最近30天的日期数组 (包含今天)
     const recentDates = [];
     const today = new Date();
@@ -353,25 +411,47 @@ document.addEventListener('DOMContentLoaded', function() {
       recentDates.push(`${map.year}-${map.month}-${map.day}`);
     }
 
-    // 并发请求所有 URL 的数据
-    for (const item of items) {
-      const url = item.dataset.url;
-      const statusContainer = item.querySelector('.daily-status-container');
-      if (!statusContainer) continue;
+    try {
+      // 统一获取所有站点的最近30天数据
+      const response = await fetch(`${apiUrl}/api/recent-stats`);
+      const result = await response.json();
 
-      try {
-        const response = await fetch(`${apiUrl}/api/recent-stats?url=${encodeURIComponent(url)}`);
-        const result = await response.json();
+      if (result.success && Array.isArray(result.data)) {
+        // 创建数据映射 Map<url, statsData>
+        const statsMap = new Map();
+        result.data.forEach(item => {
+          if (item.url) {
+            statsMap.set(item.url, item);
+          }
+        });
 
-        if (result.success) {
-           renderDailyStatusBar(statusContainer, result.data, recentDates);
-        } else {
-           renderEmptyStatusBar(statusContainer, recentDates);
-        }
-      } catch (error) {
-        console.error(`获取最近30天数据失败 (${url}):`, error);
-        renderEmptyStatusBar(statusContainer, recentDates);
+        // 遍历页面上的卡片并渲染
+        items.forEach(item => {
+          const url = item.dataset.url;
+          const statusContainer = item.querySelector('.daily-status-container');
+          if (!statusContainer) return;
+
+          const itemData = statsMap.get(url);
+          if (itemData) {
+            renderDailyStatusBar(statusContainer, itemData, recentDates);
+          } else {
+            renderEmptyStatusBar(statusContainer, recentDates);
+          }
+        });
+      } else {
+        // 获取失败，渲染空状态
+        items.forEach(item => {
+          const statusContainer = item.querySelector('.daily-status-container');
+          if (statusContainer) renderEmptyStatusBar(statusContainer, recentDates);
+        });
       }
+    } catch (error) {
+      console.error('批量获取最近30天数据失败:', error);
+      // 出错时渲染空状态
+      items.forEach(item => {
+        const statusContainer = item.querySelector('.daily-status-container');
+        if (statusContainer) renderEmptyStatusBar(statusContainer, recentDates);
+      });
     }
   }
 

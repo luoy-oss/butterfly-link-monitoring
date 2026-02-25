@@ -2,54 +2,63 @@
 
 #monitoring-container {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 10px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); /* 调整为更小的最小宽度以容纳4列 */
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* 减小最小宽度，适应更多列 */
+  gap: 15px; /* 减小间距 */
+}
+
+@media (min-width: 1200px) {
+  #monitoring-container {
+     grid-template-columns: repeat(4, 1fr); /* 大屏幕强制4列 */
+  }
 }
 
 .loading-message, .none-message, .error-message {
   grid-column: 1 / -1; /* 消息占满全宽 */
-  padding: 20px;
+  padding: 40px;
   text-align: center;
   border-radius: 8px;
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--card-bg, #fff);
+  color: var(--font-color, #333);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  font-size: 16px;
+}
+
+.error-message {
+  color: #ff4d4f;
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
 }
 
 .monitor-item {
   display: flex;
   flex-direction: column;
   background-color: var(--card-bg, #fff);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 8px; /* 减小圆角 */
+  padding: 12px; /* 减小内边距 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
+  font-size: 14px; /* 整体字体减小 */
 }
 
-.monitor-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-/* 顶部信息 */
 .site-info {
   display: flex;
   align-items: center;
-  margin-bottom: 8px; /* 减少间距 */
+  margin-bottom: 8px;
   position: relative;
-  /* 为右侧按钮预留空间 */
-  padding-right: 36px; 
+  /* 调整布局，历史按钮放到右上角绝对定位 */
 }
 
 .site-avatar {
-  width: 32px; /* 缩小头像 */
-  height: 32px;
+  width: 28px; /* 进一步缩小头像 */
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
-  margin-right: 10px;
+  margin-right: 8px;
   background-color: #f0f0f0;
   flex-shrink: 0;
 }
@@ -58,81 +67,102 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.site-meta {
-  flex: 1;
-  min-width: 0; /* 防止文本溢出 */
+  display: block; /* 消除图片底部的间隙 */
 }
 
 .site-title {
-  font-size: 16px;
+  font-size: 14px; /* 减小标题字体 */
   font-weight: bold;
   color: var(--font-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 120px; /* 限制标题宽度 */
 }
 
 .site-url {
-  font-size: 12px;
+  font-size: 11px; /* 减小URL字体 */
   color: #999;
   text-decoration: none;
   display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
-.site-url:hover {
-  color: var(--theme-color, #49b1f5);
-}
-
-/* 状态徽章 */
+/* 状态徽章调整 */
 .status-badge {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px; /* 减小徽章字体 */
+  font-weight: normal;
   color: white;
-  margin-left: 8px;
-  /* 确保徽章不会被挤压 */
-  flex-shrink: 0;
+  margin-left: auto; /* 推到右侧 */
+  margin-right: 24px; /* 为历史按钮留出空间 */
 }
 
-.status-badge.available {
-  background-color: #52c41a;
-}
-
-.status-badge.unavailable {
-  background-color: #ff4d4f;
-}
-
-/* 历史按钮 */
+/* 历史按钮调整 */
 .history-btn {
   position: absolute;
-  right: 0;
+  right: -4px;
   top: 50%;
   transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 8px;
-  color: #999;
-  transition: color 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-btn:hover {
-  color: var(--theme-color, #49b1f5);
+  padding: 4px;
 }
 
 .history-btn svg {
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
+  width: 16px; /* 缩小图标 */
+  height: 16px;
+}
+
+/* 截图区域调整 */
+.site-screenshot {
+  margin-top: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 100px; /* 减小截图高度 */
+}
+
+/* 每日状态条调整 */
+.daily-status-container {
+  height: 24px; /* 减小高度 */
+  margin: 8px 0;
+  display: flex;
+  gap: 1px; /* 减小条纹间距 */
+}
+
+.daily-status-item {
+  flex: 1;
+  background-color: #eee;
+  border-radius: 1px;
+  position: relative;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+/* 底部详细状态调整 */
+.status-detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px; /* 减小字体 */
+  color: #888;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  padding-top: 8px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.metric-item .label {
+  display: none; /* 隐藏标签以节省空间 */
+}
+
+.metric-item .value {
+  font-family: monospace;
 }
 
 /* 历史记录模态框 */
