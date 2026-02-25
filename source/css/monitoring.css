@@ -1,19 +1,81 @@
 /* 监控页面样式重构 */
 
+/* --------------------------------------
+ * 覆盖主题默认布局限制 (关键修改)
+ * -------------------------------------- */
+
+/* 1. 解除主容器宽度限制 */
+#content-inner.layout.hide-aside {
+  max-width: 100%;
+  padding: 0;
+}
+
+/* 2. 移除默认的内容卡片样式（背景、阴影、内边距）
+   因为我们使用的是 Grid 卡片布局，不需要外层再包一个大卡片 */
+#content-inner.layout > #monitoring-page {
+  background: transparent;
+  box-shadow: none;
+  padding: 20px;
+  width: 100%;
+  border-radius: 0;
+}
+
+/* --------------------------------------
+ * 监控页面内部样式
+ * -------------------------------------- */
+
+/* 页面标题区域美化 */
+#monitoring-page .monitoring-header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding-top: 20px;
+}
+
+#monitoring-page .page-title {
+  font-size: 2rem;
+  margin-bottom: 10px;
+  font-weight: 700;
+  /* 渐变色标题，增加科技感 */
+  background: linear-gradient(120deg, #1890ff, #36cfc9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+#monitoring-page .monitoring-description {
+  color: var(--font-color);
+  opacity: 0.7;
+  font-size: 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
 #monitoring-container {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1800px; /* 扩大最大宽度限制 */
   margin: 0 auto;
   padding: 10px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* 稍微调宽单个卡片最小宽度 */
+  gap: 10px; /* 增加间距 */
 }
 
-@media (min-width: 1400px) {
+@media (min-width: 600px) {
   #monitoring-container {
-     grid-template-columns: repeat(4, 1fr);
+     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 800px) {
+  #monitoring-container {
+     grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1800px) {
+  #monitoring-container {
+     grid-template-columns: repeat(4, 1fr); /* 大屏显示4列 */
   }
 }
 
@@ -40,7 +102,7 @@
   flex-direction: column;
   background-color: var(--card-bg, #fff);
   border-radius: 12px;
-  padding: 16px;
+  padding: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
