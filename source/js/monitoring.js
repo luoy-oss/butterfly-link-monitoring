@@ -47,8 +47,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      // 3. 渲染每个站点
-      result.data.forEach(linkData => {
+      // 3. 渲染每个站点 (反转数组以调整为顺序显示)
+      result.data.reverse().forEach(linkData => {
         const itemEl = createMonitorItem(linkData);
         container.appendChild(itemEl);
       });
@@ -71,26 +71,29 @@ document.addEventListener('DOMContentLoaded', function() {
    */
   function createMonitorItem(data) {
     const itemEl = document.createElement('div');
-    itemEl.className = 'monitor-item';
-    itemEl.dataset.url = data.url; // 添加 data-url 属性
+    itemEl.className = `monitor-item ${data.available ? 'status-available' : 'status-unavailable'}`;
+    itemEl.dataset.url = data.url;
     
-    // --- 顶部：站点信息 ---
-    const siteInfoEl = document.createElement('div');
-    siteInfoEl.className = 'site-info';
+    // --- 顶部：站点信息 (Header) ---
+    const headerEl = document.createElement('div');
+    headerEl.className = 'site-header';
+    
+    // 左侧：头像 + 信息
+    const leftEl = document.createElement('div');
+    leftEl.className = 'site-header-left';
     
     // 头像
     const avatarEl = document.createElement('div');
     avatarEl.className = 'site-avatar';
     const imgEl = document.createElement('img');
-    const defaultAvatarSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#e5e7eb"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#9ca3af">IMG</text></svg>';
-    const errorAvatarSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#fecaca"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ef4444">ERR</text></svg>';
-    const defaultAvatarDataURI = 'data:image/svg+xml;utf8,' + encodeURIComponent(defaultAvatarSvg);
-    const errorAvatarDataURI = 'data:image/svg+xml;utf8,' + encodeURIComponent(errorAvatarSvg);
+    const defaultAvatarDataURI = "https://www.drluo.top/img/err_avatar.webp";
+    const errorAvatarDataURI = "https://www.drluo.top/img/err_avatar.webp";
+    
     imgEl.src = data.avatar || defaultAvatarDataURI; 
     imgEl.alt = data.title || 'Unknown Site';
     imgEl.onerror = () => { imgEl.src = errorAvatarDataURI; };
     avatarEl.appendChild(imgEl);
-    siteInfoEl.appendChild(avatarEl);
+    leftEl.appendChild(avatarEl);
     
     // 文本信息
     const metaEl = document.createElement('div');
@@ -99,6 +102,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const titleEl = document.createElement('div');
     titleEl.className = 'site-title';
     titleEl.textContent = data.title || data.url;
+    titleEl.title = data.title || data.url; // Tooltip
     metaEl.appendChild(titleEl);
     
     const urlEl = document.createElement('a');
@@ -107,15 +111,15 @@ document.addEventListener('DOMContentLoaded', function() {
     urlEl.target = '_blank';
     urlEl.rel = 'noopener noreferrer';
     urlEl.textContent = data.url;
+    urlEl.title = data.url; // Tooltip
     metaEl.appendChild(urlEl);
     
-    siteInfoEl.appendChild(metaEl);
-    
-    // 状态徽章 (放在右上角或跟随标题)
-    const statusBadge = document.createElement('div');
-    statusBadge.className = `status-badge ${data.available ? 'available' : 'unavailable'}`;
-    statusBadge.textContent = data.available ? '正常' : '异常';
-    siteInfoEl.appendChild(statusBadge);
+    leftEl.appendChild(metaEl);
+    headerEl.appendChild(leftEl);
+
+    // 右侧：历史按钮
+    const rightEl = document.createElement('div');
+    rightEl.className = 'site-header-right';
 
     // 历史按钮
     const historyBtn = document.createElement('button');
@@ -126,9 +130,10 @@ document.addEventListener('DOMContentLoaded', function() {
       e.stopPropagation();
       openHistoryModal(data);
     };
-    siteInfoEl.appendChild(historyBtn);
-
-    itemEl.appendChild(siteInfoEl);
+    rightEl.appendChild(historyBtn);
+    
+    headerEl.appendChild(rightEl);
+    itemEl.appendChild(headerEl);
 
     // --- 中部：截图 (新增) ---
     if (data.screenshot) {
@@ -148,27 +153,8 @@ document.addEventListener('DOMContentLoaded', function() {
     dailyStatusEl.innerHTML = '<div class="daily-status-loading"></div>';
     itemEl.appendChild(dailyStatusEl);
 
-    // --- 底部：详细状态 ---
-    const statusDetailEl = document.createElement('div');
-    statusDetailEl.className = 'status-detail';
+    // --- 底部：详细状态 (已移除) ---
     
-    const metricsHtml = `
-      <div class="metric-item">
-        <span class="label">状态码:</span>
-        <span class="value">${data.status || '-'}</span>
-      </div>
-      <div class="metric-item">
-        <span class="label">响应时间:</span>
-        <span class="value">${formatResponseTime(data.responseTime)}</span>
-      </div>
-      <div class="metric-item">
-        <span class="label">检测时间:</span>
-        <span class="value">${formatTime(new Date(data.checkedAt))}</span>
-      </div>
-    `;
-    statusDetailEl.innerHTML = metricsHtml;
-    itemEl.appendChild(statusDetailEl);
-
     return itemEl;
   }
 
