@@ -5,7 +5,10 @@
 
 document.addEventListener('DOMContentLoaded', function() {
   const monitoringConfig = window.MONITORING_CONFIG || {};
-  const apiUrl = monitoringConfig.apiUrl || 'https://blog-link-monitoring.drluo.top';
+  let apiUrl = monitoringConfig.apiUrl || 'https://blog-link-monitoring.drluo.top';
+  if (apiUrl.endsWith('/')) {
+    apiUrl = apiUrl.slice(0, -1);
+  }
   const container = document.getElementById('monitoring-container');
   const timezone = 'Asia/Shanghai';
   const timeFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -54,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
       initHistoryModal();
       
       // 5. 获取并渲染当月每日状态条
-      fetchMonthlyStats();
+      fetchCurrentMonthStats();
 
     } catch (error) {
       console.error('获取监控数据失败:', error);
@@ -79,10 +82,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const avatarEl = document.createElement('div');
     avatarEl.className = 'site-avatar';
     const imgEl = document.createElement('img');
-    // 使用数据中的 avatar，如果没有则使用默认图或占位
-    imgEl.src = data.avatar || 'https://via.placeholder.com/48'; 
+    const defaultAvatarSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#e5e7eb"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#9ca3af">IMG</text></svg>';
+    const errorAvatarSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#fecaca"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ef4444">ERR</text></svg>';
+    const defaultAvatarDataURI = 'data:image/svg+xml;utf8,' + encodeURIComponent(defaultAvatarSvg);
+    const errorAvatarDataURI = 'data:image/svg+xml;utf8,' + encodeURIComponent(errorAvatarSvg);
+    imgEl.src = data.avatar || defaultAvatarDataURI; 
     imgEl.alt = data.title || 'Unknown Site';
-    imgEl.onerror = () => { imgEl.src = 'https://via.placeholder.com/48?text=Err'; }; // 头像加载失败回退
+    imgEl.onerror = () => { imgEl.src = errorAvatarDataURI; };
     avatarEl.appendChild(imgEl);
     siteInfoEl.appendChild(avatarEl);
     
@@ -242,13 +248,44 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       const response = await fetch(`${apiUrl}/api/history?url=${encodeURIComponent(currentHistoryUrl)}&page=${currentHistoryPage}&limit=20`);
       const result = await response.json();
+      const logs = Array.isArray(result.data) ? result.data : [];
+      const monthlySummary = Array.isArray(result.monthlySummary) ? result.monthlySummary : [];
 
       if (currentHistoryPage === 1) {
         historyModalContent.innerHTML = '';
       }
 
-      if (result.success && result.data.length > 0) {
-        result.data.forEach(log => {
+      if (result.success && currentHistoryPage === 1 && monthlySummary.length > 0) {
+        const summaryTitle = document.createElement('li');
+        summaryTitle.className = 'history-section-title';
+        summaryTitle.textContent = '月度汇总';
+        historyModalContent.appendChild(summaryTitle);
+
+        monthlySummary.forEach(summary => {
+          const item = document.createElement('li');
+          item.className = 'history-item history-monthly';
+          item.innerHTML = `
+            <div class="history-time">${summary.month || '-'}</div>
+            <div class="history-status">月度汇总</div>
+            <div class="history-meta">
+              <span>可用率 ${formatPercentage(summary.uptimePercentage)}</span> | 
+              <span>平均响应 ${formatResponseTime(summary.avgResponseTime)}</span> | 
+              <span>检测 ${summary.totalChecks || 0}</span>
+            </div>
+          `;
+          historyModalContent.appendChild(item);
+        });
+      }
+
+      if (result.success && logs.length > 0) {
+        if (currentHistoryPage === 1 && monthlySummary.length > 0) {
+          const detailTitle = document.createElement('li');
+          detailTitle.className = 'history-section-title';
+          detailTitle.textContent = '当月明细';
+          historyModalContent.appendChild(detailTitle);
+        }
+
+        logs.forEach(log => {
           const item = document.createElement('li');
           item.className = `history-item ${log.available ? 'success' : 'fail'}`;
           item.innerHTML = `
@@ -269,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (hasMore) {
           loadMoreBtn.textContent = '加载更多';
         }
-      } else if (currentHistoryPage === 1) {
+      } else if (currentHistoryPage === 1 && monthlySummary.length === 0) {
         historyModalContent.innerHTML = '<div class="none-message">暂无历史记录</div>';
       }
     } catch (error) {
@@ -290,87 +327,107 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /**
-   * 获取并渲染月度每日状态
+   * 获取并渲染当前月每日状态 (使用 /api/current-month 接口)
    */
-  async function fetchMonthlyStats() {
-    try {
-      // 默认获取当前月
-      const response = await fetch(`${apiUrl}/api/monthly`);
-      const result = await response.json();
+  async function fetchCurrentMonthStats() {
+    // 遍历页面上所有的卡片，分别请求数据
+    const items = document.querySelectorAll('.monitor-item');
+    
+    // 获取当前年和月，用于计算当月天数
+    const { year: currentYear, month: currentMonth } = getShanghaiYearMonth();
+    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
 
-      if (!result.success || !result.data) return;
+    // 并发请求所有 URL 的数据 (注意控制并发量，虽然浏览器会自动处理)
+    // 这里为了简单直接遍历
+    for (const item of items) {
+      const url = item.dataset.url;
+      const statusContainer = item.querySelector('.daily-status-container');
+      if (!statusContainer) continue;
 
-      // 解析后端返回的月份 (例如 "2026-02")，如果未返回则回退到当前时间
-      let currentYear, currentMonth;
-      if (result.month) {
-        const parts = result.month.split('-');
-        currentYear = parseInt(parts[0], 10);
-        currentMonth = parseInt(parts[1], 10);
-      } else {
-        const parts = getShanghaiYearMonth();
-        currentYear = parts.year;
-        currentMonth = parts.month;
-      }
+      try {
+        const response = await fetch(`${apiUrl}/api/current-month?url=${encodeURIComponent(url)}`);
+        const result = await response.json();
 
-      // 计算该月份的总天数
-      // new Date(year, month, 0) 获取的是该月最后一天
-      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-
-      // 遍历页面上所有的卡片
-      const items = document.querySelectorAll('.monitor-item');
-      items.forEach(item => {
-        const url = item.dataset.url;
-        const statusContainer = item.querySelector('.daily-status-container');
-        if (!statusContainer) return;
-
-        // 获取该 URL 的历史数据 (数组)
-        const historyData = result.data[url] || [];
-        // 转换为 Map 方便按日期查找: "2023-10-01" -> { uptime: 1, count: 20 }
-        const historyMap = {};
-        historyData.forEach(d => historyMap[d.date] = d);
-
-        statusContainer.innerHTML = ''; // 清空加载动画
-
-        // 生成每一天的条纹
-        for (let day = 1; day <= daysInMonth; day++) {
-          const dateStr = `${currentYear}-${padZero(currentMonth)}-${padZero(day)}`;
-          const dayData = historyMap[dateStr];
-          
-          const strip = document.createElement('div');
-          strip.className = 'daily-status-item';
-          
-          // 判断颜色状态
-          if (dayData) {
-            if (dayData.uptime >= 1.0) {
-              strip.classList.add('status-success'); // 全绿
-            } else if (dayData.uptime > 0) {
-              strip.classList.add('status-partial'); // 部分失败 (橙色/黄色)
-            } else {
-              strip.classList.add('status-fail');    // 全红
-            }
-            
-            // Tooltip 内容
-            const uptimePercent = Math.round(dayData.uptime * 100);
-            strip.innerHTML = `
-              <div class="daily-status-tooltip">
-                ${dateStr}<br>
-                可用性: ${uptimePercent}%<br>
-                检测次数: ${dayData.count}
-              </div>
-            `;
-          } else {
-            strip.classList.add('status-none'); // 无数据 (灰色)
-            strip.innerHTML = `<div class="daily-status-tooltip">${dateStr}<br>无数据</div>`;
-          }
-          
-          statusContainer.appendChild(strip);
+        if (result.success) {
+           renderDailyStatusBar(statusContainer, result.data, currentYear, currentMonth, daysInMonth);
+        } else {
+           renderEmptyStatusBar(statusContainer, currentYear, currentMonth, daysInMonth);
         }
-      });
-
-    } catch (error) {
-      console.error('获取月度状态失败:', error);
+      } catch (error) {
+        console.error(`获取当月数据失败 (${url}):`, error);
+        renderEmptyStatusBar(statusContainer, currentYear, currentMonth, daysInMonth);
+      }
     }
   }
+
+  function renderDailyStatusBar(container, data, year, month, daysInMonth) {
+    container.innerHTML = ''; // 清空加载动画
+    
+    // 准备数据 Map
+    const statsMap = {};
+    if (data && Array.isArray(data.stats)) {
+      data.stats.forEach(stat => {
+        statsMap[stat.date] = stat;
+      });
+    }
+
+    // 生成每一天的条纹
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${padZero(month)}-${padZero(day)}`;
+      const dayStat = statsMap[dateStr];
+      
+      const strip = document.createElement('div');
+      strip.className = 'daily-status-item';
+      
+      if (dayStat) {
+        // 计算当天可用率
+        const uptime = dayStat.totalChecks > 0 
+          ? (dayStat.successfulChecks / dayStat.totalChecks) 
+          : 0;
+        
+        if (uptime >= 1.0) {
+          strip.classList.add('status-success');
+        } else if (uptime > 0) {
+          strip.classList.add('status-partial');
+        } else {
+          strip.classList.add('status-fail');
+        }
+        
+        const uptimePercent = Math.round(uptime * 100);
+        const avgTime = dayStat.totalChecks > 0 
+          ? Math.round(dayStat.totalResponseTime / dayStat.totalChecks) 
+          : 0;
+
+        // Tooltip 内容
+        strip.innerHTML = `
+          <div class="daily-status-tooltip">
+            ${dateStr}<br>
+            可用率: ${uptimePercent}%<br>
+            响应: ${avgTime}ms<br>
+            检测: ${dayStat.totalChecks}次
+          </div>
+        `;
+      } else {
+        strip.classList.add('status-none'); // 无数据
+        strip.innerHTML = `<div class="daily-status-tooltip">${dateStr}<br>无数据</div>`;
+      }
+      
+      container.appendChild(strip);
+    }
+  }
+
+  function renderEmptyStatusBar(container, year, month, daysInMonth) {
+    container.innerHTML = '';
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${padZero(month)}-${padZero(day)}`;
+      const strip = document.createElement('div');
+      strip.className = 'daily-status-item status-none';
+      strip.innerHTML = `<div class="daily-status-tooltip">${dateStr}<br>无数据</div>`;
+      container.appendChild(strip);
+    }
+  }
+
+  // --- 废弃旧的 fetchMonthlyStats 函数 ---
 
   // --- 工具函数 ---
 
@@ -408,6 +465,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       return `${(ms / 1000).toFixed(2)}s`;
     }
+  }
+
+  function formatPercentage(value) {
+    if (value === null || value === undefined || isNaN(value)) return '-';
+    return `${Number(value).toFixed(2)}%`;
   }
 
   // --- 历史记录模态框 UI 逻辑补充 ---
