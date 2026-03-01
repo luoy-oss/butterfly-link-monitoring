@@ -554,3 +554,27 @@
 [data-theme="dark"] .load-more-btn:hover {
   background-color: rgba(255,255,255,0.2);
 }
+
+/* 每日明细滚动区域样式 */
+.history-detail-list {
+  max-height: 300px;
+  overflow-y: auto;
+  /* 美化滚动条 (Webkit) */
+}
+
+.history-detail-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.history-detail-list::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.history-detail-list::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+[data-theme="dark"] .history-detail-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}

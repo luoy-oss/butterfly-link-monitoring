@@ -314,9 +314,44 @@ document.addEventListener('DOMContentLoaded', function() {
         if (stats.length > 0) {
           const detailTitle = document.createElement('li');
           detailTitle.className = 'history-section-title';
-          detailTitle.textContent = '每日明细';
+          // 添加展开/收起交互样式
+          detailTitle.style.cursor = 'pointer';
+          detailTitle.style.display = 'flex';
+          detailTitle.style.justifyContent = 'space-between';
+          detailTitle.style.alignItems = 'center';
           detailTitle.style.marginTop = '20px';
+          
+          // 默认收起状态，箭头向右（初始状态）
+          detailTitle.innerHTML = `
+            <span>每日明细</span>
+            <span class="toggle-icon" style="transition: transform 0.3s; transform: rotate(-90deg);">▼</span>
+          `;
           historyModalContent.appendChild(detailTitle);
+
+          // 创建容器列表项，用于包含每日明细列表
+          const detailContainerLi = document.createElement('li');
+          detailContainerLi.style.padding = '0';
+          detailContainerLi.style.border = 'none';
+          detailContainerLi.style.display = 'none'; // 默认隐藏
+
+          // 创建内部列表
+          const detailList = document.createElement('ul');
+          detailList.className = 'history-list history-detail-list'; // 复用样式并添加滚动样式
+          
+          detailContainerLi.appendChild(detailList);
+          historyModalContent.appendChild(detailContainerLi);
+
+          // 绑定点击事件
+          detailTitle.onclick = () => {
+            const isHidden = detailContainerLi.style.display === 'none';
+            if (isHidden) {
+              detailContainerLi.style.display = 'block';
+              detailTitle.querySelector('.toggle-icon').style.transform = 'rotate(0deg)';
+            } else {
+              detailContainerLi.style.display = 'none';
+              detailTitle.querySelector('.toggle-icon').style.transform = 'rotate(-90deg)';
+            }
+          };
           
           // 按日期倒序排列
           const sortedStats = [...stats].sort((a, b) => b.date.localeCompare(a.date));
@@ -341,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function() {
                  <span>${avgTime}ms</span>
                </div>
              `;
-             historyModalContent.appendChild(item);
+             detailList.appendChild(item);
           });
         }
 
